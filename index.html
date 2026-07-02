@@ -1022,7 +1022,7 @@ function renderFlavourGauge(data){
   var headline='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;"><div class="plabel" style="margin:0;">Flavour volume</div><div style="font-size:20px;font-weight:700;color:'+ZT[fvZone(cur)]+';">'+Math.round(cur)+' <span style="font-size:11px;color:#b4afa2;font-weight:400;">/ '+scaleMax+'</span></div></div>';
   var delta=Math.round(cur-v0);
   var summary=carbonated?'<div style="font-size:11px;color:#8a8578;margin-top:12px;">carbonated '+Math.round(cur)+' &middot; '+bar+' bar CO&#8322; '+(delta>=0?'+':'')+delta+' vs still '+Math.round(v0)+'</div>':'';
-  return headline+gauge+summary;
+  return headline+'<div style="flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;">'+gauge+summary+'</div>';
 }
 function topNoteIn(notes,layers){
   var best=null,bv=0;
@@ -1071,11 +1071,14 @@ function ringSvg(frac,color){
   var off=(97.4*(1-frac));
   return '<svg viewBox="0 0 36 36" style="width:44px;height:44px;flex:0 0 auto;"><circle cx="18" cy="18" r="15.5" fill="none" stroke="#efece4" stroke-width="5"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="'+color+'" stroke-width="5" stroke-linecap="round" stroke-dasharray="97.4" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 18 18)"/></svg>';
 }
+var FAM_BANDS={taste:[35,90,130],trigeminal:[12,35,70],aromatic:[35,110,180]};
 function kpiZone(kind,v){
   var G='#1D9E75',A='#BA7517',R='#E24B4A';
   if(kind==='vol')return v<100?[R,'thin']:(v<=300?[G,'in range']:(v<=400?[A,'loud']:[R,'over']));
   if(kind==='body')return v<2?[R,'watery']:(v<3?[A,'light']:(v<=10?[G,'in range']:(v<=13?[A,'heavy']:[R,'over'])));
-  return v<5?[A,'faint']:(v<=30?[G,'present']:[A,'dominant']);  // family presence (heuristic, tunable in Config)
+  var b=FAM_BANDS[kind];
+  if(!b)return v<5?[A,'faint']:(v<=30?[G,'present']:[A,'dominant']);
+  return v<b[0]?[A,'thin/absent']:(v<b[1]?[G,'balanced']:(v<b[2]?[G,'forward']:[R,'very loud']));
 }
 function kpiDot(color){return '<span class="kpi-dot" style="background:'+color+';box-shadow:0 0 0 4px '+color+'22;"></span>';}
 function kpiCards(res){
@@ -1083,9 +1086,9 @@ function kpiCards(res){
   var cards=[
     ['Flavour volume',fv.current,'vol'],
     ['Body',body,'body'],
-    ['Taste',res.family.taste||0,'fam'],
-    ['Triggers',res.family.trigeminal||0,'fam'],
-    ['Aroma',res.family.aromatic||0,'fam']
+    ['Taste',res.family.taste||0,'taste'],
+    ['Triggers',res.family.trigeminal||0,'trigeminal'],
+    ['Aroma',res.family.aromatic||0,'aromatic']
   ];
   return '<div class="kpirow">'+cards.map(function(c){
     var z=kpiZone(c[2],c[1]); var shown=(c[0]==='Body')?(Math.round(c[1]*10)/10):Math.round(c[1]);
@@ -1185,12 +1188,12 @@ function renderRecipe(){
     '<div class="headline">'+headline(res)+'</div>'+
     kpiCards(res)+
     '<div class="dgrid-tt">'+
-      '<div class="dcard" style="display:flex;flex-direction:column;justify-content:center;"><div class="plabel">Temporal shape'+gMark+'</div>'+barsFromLayer(res.layer,baseRes&&baseRes.layer)+'</div>'+
+      '<div class="dcard"><div class="plabel">Temporal shape'+gMark+'</div><div style="display:flex;align-items:center;min-height:190px;">'+temporalSVG(res,baseRes,recipeNm,gLbl)+'</div></div>'+
       '<div class="dcard"><div class="plabel">Taste profile'+gMark+'</div><div class="chartbox" style="height:250px;"><canvas id="rc-taste"></canvas></div></div>'+
     '</div>'+
     '<div class="dgrid2">'+
       '<div class="dcard"><div class="plabel">Tasting arc &mdash; when notes arrive'+(ghostChart?' <span style="color:#aaa;font-weight:400;">(dashed = '+ghostChartLbl+')</span>':'')+'</div>'+chartLegendArc(noteList.slice(0,5))+'<div class="chartbox" style="height:220px;"><canvas id="rc-arc"></canvas></div></div>'+
-      '<div class="dcard" style="display:flex;flex-direction:column;justify-content:center;">'+renderFlavourGauge(flavourVolumeData(RECIPE))+'</div>'+
+      '<div class="dcard" style="display:flex;flex-direction:column;">'+renderFlavourGauge(flavourVolumeData(RECIPE))+'</div>'+
     '</div>'+
     '<div class="dcard"><div class="plabel">Flavour by intensity'+(ghostChart?' <span style="color:#aaa;font-weight:400;">(grey = '+ghostChartLbl+')</span>':'')+'</div><div class="chartbox" id="rc-barbox"><canvas id="rc-bar"></canvas></div></div>'+
     (fitDiff?'<div class="dcard">'+fitDiff+'</div>':'')+
@@ -1215,23 +1218,31 @@ function chartLegendArc(list){
   }).join('')+'</div>';
 }
 function destroyCharts(){Object.keys(RCHARTS).forEach(function(k){try{RCHARTS[k].destroy();}catch(e){}});RCHARTS={};}
-function temporalSVG(res,baseRes){
+function temporalSVG(res,baseRes,nowLbl,ghostLbl){
   var vals=LAYERS.map(function(l){return res.layer[l]||0;});
   var comp=baseRes?LAYERS.map(function(l){return baseRes.layer[l]||0;}):null;
-  var maxV=Math.max.apply(null,vals.concat(comp||[]).concat([1]))*1.18;
-  var W=560,H=210,padL=10,padR=10,padT=26,padB=24;
+  var rawMax=Math.max.apply(null,vals.concat(comp||[]).concat([1]))*1.15;
+  var niceMax=Math.max(10,Math.ceil(rawMax/10)*10);
+  var W=560,H=222,padL=30,padR=10,padT=28,padB=24;
   var iw=W-padL-padR, ih=H-padT-padB;
   function x(i){return padL+(i/(LAYERS.length-1))*iw;}
-  function y(v){return padT+ih-(v/maxV)*ih;}
+  function y(v){return padT+ih-(v/niceMax)*ih;}
   function poly(a){return a.map(function(v,i){return x(i)+','+y(v);}).join(' ');}
-  var grid='';for(var g=0;g<=3;g++){var gy=padT+ih-(g/3)*ih;grid+='<line x1="'+padL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+gy.toFixed(1)+'" stroke="#efece4" stroke-width="1"/>';}
+  var steps=5,grid='',ylbls='';
+  for(var g=0;g<=steps;g++){
+    var gv=niceMax*g/steps,gy=y(gv);
+    grid+='<line x1="'+padL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+gy.toFixed(1)+'" stroke="#efece4" stroke-width="1"/>';
+    ylbls+='<text x="'+(padL-6)+'" y="'+(gy+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#b4afa2">'+Math.round(gv)+'</text>';
+  }
   var compLine=comp?'<polyline points="'+poly(comp)+'" fill="none" stroke="#bdb8ab" stroke-width="1.5" stroke-dasharray="4 3"/>'+comp.map(function(v,i){return '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="2.5" fill="#bdb8ab"/>';}).join(''):'';
-  var area='<polygon points="'+x(0)+','+(padT+ih)+' '+poly(vals)+' '+x(LAYERS.length-1)+','+(padT+ih)+'" fill="rgba(212,83,126,.10)"/>';
+  var area='<polygon points="'+x(0)+','+y(0)+' '+poly(vals)+' '+x(LAYERS.length-1)+','+y(0)+'" fill="rgba(212,83,126,.10)"/>';
   var line='<polyline points="'+poly(vals)+'" fill="none" stroke="#D4537E" stroke-width="2.5"/>';
   var pts=vals.map(function(v,i){return '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="3.5" fill="#D4537E"/><text x="'+x(i).toFixed(1)+'" y="'+(y(v)-9).toFixed(1)+'" text-anchor="middle" font-size="10" font-weight="700" fill="#0a0a0a">'+(Math.round(v*10)/10)+'</text>';}).join('');
   var xlbls=LAYERS.map(function(l,i){return '<text x="'+x(i).toFixed(1)+'" y="'+(H-7)+'" text-anchor="middle" font-size="9" fill="#9a958a">'+l+'</text>';}).join('');
-  var leg=comp?'<line x1="'+(W-150)+'" y1="11" x2="'+(W-136)+'" y2="11" stroke="#D4537E" stroke-width="2.5"/><text x="'+(W-132)+'" y="14" font-size="9" fill="#8a8578">now</text><line x1="'+(W-96)+'" y1="11" x2="'+(W-82)+'" y2="11" stroke="#bdb8ab" stroke-width="1.5" stroke-dasharray="4 3"/><text x="'+(W-78)+'" y="14" font-size="9" fill="#8a8578">'+esc((compareName()||'compare').slice(0,10))+'</text>':'';
-  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;font-family:\'Space Mono\',monospace;">'+grid+area+compLine+line+pts+xlbls+leg+'</svg>';
+  var nl=esc((nowLbl||'now').slice(0,16)),gl=esc((ghostLbl||'compare').slice(0,16));
+  var leg='<circle cx="'+(padL+4)+'" cy="11" r="3" fill="#D4537E"/><text x="'+(padL+11)+'" y="14" font-size="9" fill="#8a8578">'+nl+'</text>'+
+    (comp?'<circle cx="'+(padL+11+nl.length*5.2+14)+'" cy="11" r="3" fill="#bdb8ab"/><text x="'+(padL+18+nl.length*5.2+14)+'" y="14" font-size="9" fill="#8a8578">'+gl+'</text>':'');
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;font-family:\'Space Mono\',monospace;">'+grid+ylbls+area+compLine+line+pts+xlbls+leg+'</svg>';
 }
 function drawRecipeCharts(res,noteList,baseRes,opts){
   opts=opts||{};
@@ -1269,11 +1280,18 @@ function drawRecipeCharts(res,noteList,baseRes,opts){
     labels=noteList.map(function(o){return o.n;});
     barSets=[{data:noteList.map(function(o){return rnd(o.t);}),backgroundColor:noteList.map(function(o){return famCol[o.f];}),borderRadius:3,barThickness:16}];
   }
-  var box=document.getElementById('rc-barbox');if(box)box.style.height=Math.max(150,labels.length*(baseRes?24:26)+44)+'px';
+  var box=document.getElementById('rc-barbox');if(box)box.style.height='320px';
+  var barValueLabels={id:'barValueLabels',afterDatasetsDraw:function(chart){
+    var ctx=chart.ctx,meta=chart.getDatasetMeta(0),data=chart.data.datasets[0].data;
+    ctx.save();ctx.font='bold 11px \'Space Mono\',monospace';ctx.fillStyle='#0a0a0a';ctx.textAlign='center';
+    meta.data.forEach(function(bar,i){var v=data[i];if(v==null)return;ctx.fillText(Math.round(v*10)/10,bar.x,bar.y-6);});
+    ctx.restore();
+  }};
   RCHARTS.bar=new Chart(document.getElementById('rc-bar'),{
     type:'bar',data:{labels:labels,datasets:barSets},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return (baseRes?c.dataset.label+': ':'')+c.parsed.x.toFixed(1);}}}},
-      scales:{x:{beginAtZero:true,grid:{color:'rgba(120,120,120,.12)'},ticks:{color:'#888',font:{size:10}}},y:{grid:{display:false},ticks:{color:'#555',font:{size:11,family:mono}}}}}
+    plugins:[barValueLabels],
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return (baseRes?c.dataset.label+': ':'')+c.parsed.y.toFixed(1);}}}},
+      scales:{y:{beginAtZero:true,grid:{color:'rgba(120,120,120,.12)'},ticks:{color:'#888',font:{size:10}}},x:{grid:{display:false},ticks:{color:'#555',font:{size:10,family:mono}}}}}
   });
   var top5=noteList.slice(0,5),dsets=[];
   top5.forEach(function(o,i){
