@@ -262,6 +262,58 @@ body{height:100vh !important;overflow:hidden !important;padding:0 0 0 214px !imp
 .dm-echo{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}
 /* formula column polish */
 .rcol-form .bhdr,.rcol-form .batch-hdr{margin-top:4px;}
+/* briefs workspace columns */
+.bws-cols{display:flex;gap:22px;align-items:flex-start;}
+.bws-list{flex:0 0 300px;min-width:0;}
+.bws-editor{flex:1;min-width:0;}
+.dcard svg,.diffbox svg{max-width:100%;height:auto;}
+/* ================= responsive: tablet & mobile ================= */
+@media(max-width:1100px){
+  body{height:auto !important;overflow:auto !important;}
+  #view-ing,#view-meth,#view-briefs{height:auto;min-height:100dvh;}
+  #view-recipe{height:auto;display:block;}
+  #view-recipe .recipe-cols{display:block !important;height:auto;overflow:visible;}
+  .rcol-form{flex:none !important;max-width:none !important;width:100%;height:auto;overflow:visible;border-right:none;}
+  .rcol-charts{height:auto;overflow:visible;}
+  .bws-cols{flex-direction:column;}
+  .bws-list{flex:none;width:100%;}
+  .bws-editor{width:100%;}
+}
+@media(max-width:900px){
+  body{padding:0 0 76px 0 !important;}
+  .navshell{top:auto;bottom:0;right:0;width:auto;height:auto;flex-direction:row;align-items:stretch;gap:2px;padding:6px 8px calc(6px + env(safe-area-inset-bottom));border-right:none;border-top:1px solid #e6e2d9;}
+  .navbrand,.navsec,.navfoot{display:none;}
+  .navitem{flex:1 1 0;flex-direction:column;justify-content:center;gap:3px;text-align:center;font-size:10px;padding:5px 2px;margin:0;}
+  .navitem .ic{width:auto;font-size:16px;}
+  .navitem.on{box-shadow:none;}
+  #view-ing,#view-meth,#view-briefs{padding:16px 14px 90px;}
+  .rcol-form{padding:12px 14px 8px !important;}
+  .rcol-charts{padding:12px 14px 90px !important;}
+  .rhead{padding:12px 14px 10px;}
+  .rhead-row{gap:10px;}
+  .rtoolbar{padding:9px 14px;gap:6px;}
+  .rtoolbar .solve{margin-left:0;}
+  .save-pop{bottom:calc(84px + env(safe-area-inset-bottom));}
+}
+@media(max-width:640px){
+  .rhead-row{flex-direction:column;align-items:stretch;}
+  .rhead .spacer{display:none;}
+  .rtitle input{font-size:20px;min-width:100px;width:100%;}
+  .selfield .finput{width:100%;}
+  .kpirow{grid-template-columns:repeat(2,1fr);gap:8px;}
+  .kpi-val{font-size:21px;}
+  .dgrid2,.dgrid-tt{grid-template-columns:1fr;}
+  .rcol-form .frow{flex-wrap:wrap !important;}
+  .rcol-form .fn{white-space:normal;}
+  .modal{margin:0;max-width:none;min-height:100dvh;border:none;}
+  .mbody{padding:14px;}
+  .mhdr,.mactions{padding:12px 14px;}
+  #view-ing .search{max-width:none;}
+  .bws-cols{gap:14px;}
+  .brief-editor{padding:12px;}
+  .dm-lbl{flex:0 0 58px;}
+  .dm-cell{width:20px;}
+}
 </style>
 </head>
 <body>
@@ -1432,7 +1484,7 @@ function openNew(){
   working={id:'',name:'',category:'other',notes:'',components:[blankComp()],overdose:{sw:0,so:0,sa:0,bi:0,um:0},overdosePrimary:'',overdoseSecondary:''};
   editIdx=null;previewMethod='All';previewDose=3;
   document.getElementById('mtitle').textContent='New ingredient';
-  document.getElementById('delbtn').style.display='none';
+  var _db=document.getElementById('delbtn');if(_db)_db.style.display='none';
   renderModal();document.getElementById('modal').classList.add('show');
 }
 function openEdit(i){
@@ -1441,7 +1493,7 @@ function openEdit(i){
   if(!working.components)working.components=[];
   editIdx=i;previewMethod='All';previewDose=3;
   document.getElementById('mtitle').textContent=working.name;
-  document.getElementById('delbtn').style.display='block';
+  var _db=document.getElementById('delbtn');if(_db)_db.style.display='block';
   renderModal();document.getElementById('modal').classList.add('show');
 }
 function isDesktop(){return !!(window.matchMedia&&window.matchMedia('(min-width:1000px)').matches);}
@@ -2198,7 +2250,7 @@ function renderBriefsView(){
       '</div>';
   } else editor='<div class="brief-empty">Select a brief to edit, or create one.</div>';
   v.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;"><div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9a958a;">Briefs</div><div style="display:flex;gap:8px;"><button class="btn sm" onclick="createBrief()">+ New brief</button><button class="btn sm" id="briefs-save" onclick="saveBriefs()"></button></div></div>'+
-    '<div style="display:flex;gap:22px;align-items:flex-start;"><div style="flex:0 0 300px;">'+list+'</div><div style="flex:1;min-width:0;">'+editor+'</div></div>';
+    '<div class="bws-cols"><div class="bws-list">'+list+'</div><div class="bws-editor">'+editor+'</div></div>';
   updateBriefsSaveBtn();
 }
 function briefFieldsHtml(b){
