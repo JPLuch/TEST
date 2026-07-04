@@ -1280,6 +1280,7 @@ function renderRecipe(){
     '</div>'+
     '<div class="dcard"><div class="plabel">Flavour by intensity</div><div class="chartbox" id="rc-barbox"><canvas id="rc-bar"></canvas></div></div>'+
     (fitDiff?'<div class="dcard">'+fitDiff+'</div>':'')+
+    renderPairingCard(res)+
     warn;
   drawRecipeCharts(res,noteList,baseRes,{bar:ghostChart,arc:ghostChart,nowLbl:recipeNm,ghostLbl:gLbl,barGhostLbl:ghostChartLbl});
 }
@@ -1989,6 +1990,90 @@ function targetFromDish(d){
   if(d.corr.indexOf('iron')>=0){bump('bitter',1);bump('sour',1);}
   bump('aromatic',Math.ceil(Object.keys(echo).length/2));
   return {bands:t,echo:echo,heat:a.heat};
+}
+// ---- food pairing recommendation: rank dish archetypes against the drink ----
+// Each archetype is a (base, cooking, sauce, heat) tuple run through the same dish model.
+// Optional n = display name where the generated label reads awkwardly.
+var PAIR_ARCHETYPES=[
+  {base:'white fish',cooking:'raw',sauce:'citrus / vinaigrette',heat:'none',n:'fish crudo, citrus'},
+  {base:'white fish',cooking:'poached',sauce:'butter / cream',heat:'none'},
+  {base:'white fish',cooking:'fried',sauce:'citrus / vinaigrette',heat:'none'},
+  {base:'white fish',cooking:'seared',sauce:'herb / salsa verde',heat:'none'},
+  {base:'oily fish',cooking:'raw',sauce:'soy / fermented',heat:'none',n:'sashimi, soy'},
+  {base:'oily fish',cooking:'grilled',sauce:'herb / salsa verde',heat:'none'},
+  {base:'oily fish',cooking:'grilled',sauce:'citrus / vinaigrette',heat:'none'},
+  {base:'oily fish',cooking:'seared',sauce:'soy / fermented',heat:'none'},
+  {base:'shellfish',cooking:'raw',sauce:'citrus / vinaigrette',heat:'none',n:'raw oysters, mignonette'},
+  {base:'shellfish',cooking:'poached',sauce:'butter / cream',heat:'none'},
+  {base:'shellfish',cooking:'grilled',sauce:'herb / salsa verde',heat:'none'},
+  {base:'shellfish',cooking:'fried',sauce:'citrus / vinaigrette',heat:'mild'},
+  {base:'poultry',cooking:'poached',sauce:'pan jus / brown',heat:'none'},
+  {base:'poultry',cooking:'roasted',sauce:'pan jus / brown',heat:'none'},
+  {base:'poultry',cooking:'grilled',sauce:'herb / salsa verde',heat:'none'},
+  {base:'poultry',cooking:'fried',sauce:'sweet glaze / bbq',heat:'hot',n:'hot fried chicken'},
+  {base:'poultry',cooking:'braised',sauce:'tomato',heat:'mild'},
+  {base:'poultry',cooking:'braised',sauce:'soy / fermented',heat:'medium'},
+  {base:'pork',cooking:'roasted',sauce:'sweet glaze / bbq',heat:'none'},
+  {base:'pork',cooking:'grilled',sauce:'sweet glaze / bbq',heat:'mild'},
+  {base:'pork',cooking:'braised',sauce:'soy / fermented',heat:'none'},
+  {base:'pork',cooking:'seared',sauce:'pan jus / brown',heat:'none'},
+  {base:'red meat',cooking:'raw',sauce:'citrus / vinaigrette',heat:'none',n:'beef tartare'},
+  {base:'red meat',cooking:'seared',sauce:'pan jus / brown',heat:'none'},
+  {base:'red meat',cooking:'grilled',sauce:'herb / salsa verde',heat:'none',n:'grilled red meat, chimichurri'},
+  {base:'red meat',cooking:'braised',sauce:'tomato',heat:'none'},
+  {base:'red meat',cooking:'braised',sauce:'soy / fermented',heat:'medium'},
+  {base:'offal / game',cooking:'seared',sauce:'pan jus / brown',heat:'none'},
+  {base:'offal / game',cooking:'grilled',sauce:'herb / salsa verde',heat:'none'},
+  {base:'offal / game',cooking:'braised',sauce:'tomato',heat:'none'},
+  {base:'offal / game',cooking:'fried',sauce:'citrus / vinaigrette',heat:'none'},
+  {base:'cheese',cooking:'raw',sauce:'none / dry',heat:'none',n:'cheese board'},
+  {base:'cheese',cooking:'raw',sauce:'sweet glaze / bbq',heat:'none',n:'cheese with honey'},
+  {base:'cheese',cooking:'fried',sauce:'tomato',heat:'none'},
+  {base:'egg',cooking:'poached',sauce:'butter / cream',heat:'none'},
+  {base:'egg',cooking:'fried',sauce:'soy / fermented',heat:'mild'},
+  {base:'vegetable',cooking:'raw',sauce:'citrus / vinaigrette',heat:'none'},
+  {base:'vegetable',cooking:'grilled',sauce:'herb / salsa verde',heat:'none'},
+  {base:'vegetable',cooking:'roasted',sauce:'none / dry',heat:'none'},
+  {base:'vegetable',cooking:'roasted',sauce:'tomato',heat:'none'},
+  {base:'vegetable',cooking:'fried',sauce:'soy / fermented',heat:'medium'},
+  {base:'vegetable',cooking:'braised',sauce:'tomato',heat:'mild'},
+  {base:'dessert',cooking:'raw',sauce:'none / dry',heat:'none',n:'fresh fruit / light dessert'},
+  {base:'dessert',cooking:'roasted',sauce:'sweet glaze / bbq',heat:'none',n:'caramelised dessert'}
+];
+var PAIR_SAUCE_LBL={'none / dry':'','butter / cream':'butter or cream','citrus / vinaigrette':'citrus dressing','tomato':'tomato','soy / fermented':'soy-ferment','pan jus / brown':'pan jus','sweet glaze / bbq':'sweet glaze','herb / salsa verde':'salsa verde'};
+function pairLabel(a){
+  if(a.n)return a.n;
+  var s=PAIR_SAUCE_LBL[a.sauce],h=HEAT_LEVELS.indexOf(a.heat||'none');
+  return a.cooking+' '+a.base+(s?(', '+s):'')+(h>0?(', '+a.heat):'');
+}
+function computePairings(res){
+  var scored=PAIR_ARCHETYPES.map(function(a){
+    return {a:a,fit:computeFit(res,targetFromDish(deriveDish(a)))};
+  }).sort(function(x,y){return y.fit.score-x.fit.score;});
+  var main=scored[0],second=null;
+  for(var i=1;i<scored.length;i++){if(scored[i].a.base!==main.a.base){second=scored[i];break;}}
+  return {main:main,second:second||scored[1]||null};
+}
+function pairWhy(f){
+  var good=f.rows.filter(function(r){return r.cur===r.target&&r.target>=2;}).map(function(r){return AXIS_LBL[r.axis];});
+  f.echoRows.forEach(function(e){if(e.hit)good.push(e.note+' echo');});
+  var worst=null;f.rows.forEach(function(r){var d=Math.abs(r.cur-r.target);if(d>=2&&(!worst||d>Math.abs(worst.cur-worst.target)))worst=r;});
+  var s=good.length?('matches '+good.slice(0,3).join(', ')):'broad structural match';
+  if(worst)s+=' &middot; watch '+AXIS_LBL[worst.axis]+' (drink is '+BAND_WORD[worst.cur]+', dish wants '+BAND_WORD[worst.target]+')';
+  return s;
+}
+function renderPairingCard(res){
+  var p=computePairings(res);if(!p.main)return '';
+  function row(tag,sp,big){
+    var sc=sp.fit.score,col=sc>=75?'#1D9E75':sc>=50?'#BA7517':'#E8312A';
+    return '<div style="display:flex;align-items:baseline;gap:10px;'+(big?'':'margin-top:10px;padding-top:10px;border-top:1px solid #efece4;')+'">'+
+      '<span style="font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:#9a958a;flex:0 0 76px;">'+tag+'</span>'+
+      '<div style="min-width:0;"><div style="font-size:'+(big?'15px':'13px')+';font-weight:700;">'+esc(pairLabel(sp.a))+'</div>'+
+      '<div class="bigmove" style="margin-top:2px;">'+pairWhy(sp.fit)+'</div></div>'+
+      '<div style="margin-left:auto;font-size:'+(big?'20px':'15px')+';font-weight:700;color:'+col+';white-space:nowrap;">'+sc+'<span style="font-size:10px;color:#b4afa2;"> /100</span></div></div>';
+  }
+  return '<div class="dcard"><div class="plabel">Food pairing &mdash; recommendation</div>'+row('Main pair',p.main,true)+(p.second?row('Secondary',p.second,false):'')+
+    '<div class="dm-note" style="margin-top:8px;">Scored against '+PAIR_ARCHETYPES.length+' dish archetypes with the brief-fit engine &mdash; as formulated at current doses.</div></div>';
 }
 var compareRecipeId=null;
 function setCompare(id){compareRecipeId=id||null;renderRecipe();}
