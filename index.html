@@ -262,6 +262,10 @@ body{height:100vh !important;overflow:hidden !important;padding:0 0 0 214px !imp
 .dm-echo{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}
 /* formula column polish */
 .rcol-form .bhdr,.rcol-form .batch-hdr{margin-top:4px;}
+/* ingredient accordion detail (mobile) */
+.ing-acc{background:#fff;border:1px solid #ddd9d0;border-radius:8px;margin:2px 0 10px;box-shadow:0 1px 2px rgba(20,18,12,.05);overflow:hidden;}
+.ing-acc .mactions{position:static;}
+.ing-acc .mbody{padding:12px;}
 /* briefs workspace columns */
 .bws-cols{display:flex;gap:22px;align-items:flex-start;}
 .bws-list{flex:0 0 300px;min-width:0;}
@@ -270,7 +274,7 @@ body{height:100vh !important;overflow:hidden !important;padding:0 0 0 214px !imp
 /* ================= responsive: tablet & mobile ================= */
 @media(max-width:1100px){
   body{height:auto !important;overflow:auto !important;}
-  #view-ing,#view-meth,#view-briefs{height:auto;min-height:100dvh;}
+  #view-ing,#view-meth,#view-briefs{height:auto;min-height:100dvh;overflow:visible;}
   #view-recipe{height:auto;display:block;}
   #view-recipe .recipe-cols{display:block !important;height:auto;overflow:visible;}
   .rcol-form{flex:none !important;max-width:none !important;width:100%;height:auto;overflow:visible;border-right:none;}
@@ -287,6 +291,7 @@ body{height:100vh !important;overflow:hidden !important;padding:0 0 0 214px !imp
   .navitem .ic{width:auto;font-size:16px;}
   .navitem.on{box-shadow:none;}
   #view-ing,#view-meth,#view-briefs{padding:16px 14px 90px;}
+  .ing-filters{position:sticky;top:0;z-index:5;background:#f7f6f2;margin:-16px -14px 0;padding:12px 14px 6px;}
   .rcol-form{padding:12px 14px 8px !important;}
   .rcol-charts{padding:12px 14px 90px !important;}
   .rhead{padding:12px 14px 10px;}
@@ -342,6 +347,7 @@ body{height:100vh !important;overflow:hidden !important;padding:0 0 0 214px !imp
 </div>
 
 <div id="view-ing">
+  <div class="ing-filters">
   <div class="toolbar">
     <input class="search" id="search" placeholder="Search ingredient or flavour&#8230;" oninput="render()">
   </div>
@@ -351,6 +357,7 @@ body{height:100vh !important;overflow:hidden !important;padding:0 0 0 214px !imp
     <select class="selfilter" id="flavfilter" onchange="setFlavFilter(this.value)"></select>
     <select class="selfilter" id="layerfilter" onchange="setLayerFilter(this.value)"></select>
     <button class="fchip" id="clearfilters" onclick="clearExtraFilters()" style="display:none;">clear &times;</button>
+  </div>
   </div>
   <div class="ing-cols">
     <div class="ing-left">
@@ -635,8 +642,10 @@ function render(){
     var e=o.e;
     var flavs=(e.components||[]).map(function(f){var on=(f.name===flavourFilter);return '<span class="ftag ft-'+f.family+'"'+(on?' style="outline:1.5px solid #0a0a0a;outline-offset:1px;"':'')+'>'+esc(f.name)+'</span>';}).join('');
     var lbadge=(layerFilter&&o.lv!=null)?'<b style="color:#1D9E75;">'+layerFilter+' '+(Math.round(o.lv*10)/10)+'</b> · ':'';
-    return '<div class="row'+(o.i===selectedIng?' sel':'')+'" onclick="openEditDispatch('+o.i+')"><div class="rtop"><span class="rname">'+esc(e.name)+'</span><span class="rcat">'+lbadge+esc(e.category||'')+'</span></div><div class="rflav">'+flavs+'</div></div>';
+    var acc=(!isDesktop()&&o.i===selectedIng)?'<div class="ing-acc" id="ingdetail-m"></div>':'';
+    return '<div class="row'+(o.i===selectedIng?' sel':'')+'" onclick="openEditDispatch('+o.i+')"><div class="rtop"><span class="rname">'+esc(e.name)+'</span><span class="rcat">'+lbadge+esc(e.category||'')+'</span></div><div class="rflav">'+flavs+'</div></div>'+acc;
   }).join('');
+  if(document.getElementById('ingdetail-m')&&working)renderIngDetail(editIdx==null);
   buildInglist();
 }
 function buildInglist(){
@@ -1497,7 +1506,11 @@ function openEdit(i){
   renderModal();document.getElementById('modal').classList.add('show');
 }
 function isDesktop(){return !!(window.matchMedia&&window.matchMedia('(min-width:1000px)').matches);}
-function openEditDispatch(i){if(isDesktop())openEditInline(i);else openEdit(i);}
+function openEditDispatch(i){
+  if(isDesktop()){openEditInline(i);return;}
+  if(selectedIng===i){clearIngDetail();return;}  // tap the open row again to collapse
+  openEditInline(i);
+}
 function openNewDispatch(){if(isDesktop())openNewInline();else openNew();}
 function openEditInline(i){
   working=JSON.parse(JSON.stringify(DB[i]));if(!working.components)working.components=[];
@@ -1510,7 +1523,9 @@ function openNewInline(){
   renderIngDetail(true);render();
 }
 function renderIngDetail(isNew){
-  var d=document.getElementById('ingdetail');if(!d)return;
+  var m=isDesktop()?null:document.getElementById('ingdetail-m'),fixed=document.getElementById('ingdetail');
+  var d=m||fixed;if(!d)return;
+  if(m&&fixed)fixed.innerHTML='';
   d.innerHTML='<div class="iddtl-hdr">'+esc(working.name||'Ingredient')+' <span style="font-size:10px;color:#9a958a;font-weight:400;">read-only</span></div>'+
     '<div id="ingdetail-body" class="mbody"></div>'+
     '<div class="mactions"><button class="btn" onclick="clearIngDetail()">Close</button><span style="font-size:10px;color:#9a958a;margin-left:auto;align-self:center;">Library is synced from GitHub &mdash; edit there.</span></div>';
